@@ -43,9 +43,18 @@ pub struct MenuRow {
     prep_max_m: f32,
 }
 
+pub struct OrderRow {
+    id: u64,
+    table_id: u64,
+    item_id: u64,
+    ready_at: String,
+}
+
 /// Initializes a database and calls the initialization query
 /// which fills it with some temporary data
 pub fn init_db() -> Connection {
+    // Note: In a real situation, would use an actual database somewhere
+    // and persist data across sessions
     let conn = Connection::open_in_memory().unwrap();
     println!("Initialized connection to DB");
 

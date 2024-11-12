@@ -8,7 +8,7 @@ use axum::routing::get;
 use axum::Json;
 use axum::Router;
 use rusqlite::Connection;
-use shared::{Menu, MenuItem, TableOrder, TableResponse};
+use shared::{Menu, MenuItem, OrderItemsRequest, TableOrder, TableResponse};
 use tokio::sync::Mutex;
 
 mod db;
@@ -57,7 +57,8 @@ impl IntoResponse for HttpError {
     }
 }
 
-/// Queries the database and returns the contents of the menu table.
+/// Queries the database and returns the contents of the menu table. Generally called
+/// at startup for each of the clients to populate their data.
 async fn get_menu(State(state): State<ServiceState>) -> ServiceResponse<Json<Menu>> {
     const QUERY: &str = "SELECT * FROM menu;";
     let conn = state.conn.lock().await;
@@ -96,7 +97,11 @@ async fn get_table(
 // TODO:
 // Client: add one or more items with a table number,
 // The application MUST, upon creation request, store the item, the table number, and how long the item will take to cook.
-async fn post_table(State(state): State<ServiceState>, Path(table_id): Path<u64>) -> StatusCode {
+async fn post_table(
+    State(state): State<ServiceState>,
+    Path(table_id): Path<u64>,
+    Json(payload): Json<OrderItemsRequest>,
+) -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
 }
 

@@ -1,0 +1,5 @@
+[package]
+name = "shared"
+edition = "2021"
+
+[dependencies]

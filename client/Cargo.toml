@@ -1,0 +1,10 @@
+[package]
+name = "client"
+edition = "2021"
+
+[[bin]]
+name = "client"
+path = "src/main.rs"
+
+[dependencies]
+shared = { path = "../shared" }

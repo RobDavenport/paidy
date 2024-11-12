@@ -1,52 +1,124 @@
-use std::convert::Infallible;
+use std::sync::Arc;
 
-use warp::{http::StatusCode, Filter, Reply};
+use axum::body::Body;
+use axum::extract::{Path, State};
+use axum::http::{Response, StatusCode};
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::Json;
+use axum::Router;
+use rusqlite::Connection;
+use shared::{Menu, MenuItem, TableOrder, TableResponse};
+use tokio::sync::Mutex;
+
+mod db;
+
+#[derive(Clone)]
+struct ServiceState {
+    conn: Arc<Mutex<Connection>>,
+}
 
 #[tokio::main]
 async fn main() {
-    // TODO: Setup the database
-    // TODO: Fill the menu items with some basic menu items
+    // Setup the service state
+    let state = ServiceState {
+        conn: Arc::new(Mutex::new(db::init_db())),
+    };
 
-    let menu_routes = warp::path("menu").and_then(get_menu);
-    let table = warp::path!("table" / u64);
+    let service = Router::new()
+        .route("/menu", get(get_menu))
+        .route("/table/:table_id", get(get_table))
+        .route(
+            "/table/:table_id/:order_id",
+            get(get_table_item).delete(delete_table_item),
+        )
+        .with_state(state);
 
-    let table_routes = table.and(warp::post()).and_then(add_items_to_table);
+    println!("Binding to 0.0.0.0:3030");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030").await.unwrap();
 
-    warp::serve(menu_routes.or(table_routes))
-        .run(([127, 0, 0, 1], 3030))
-        .await;
+    println!("Service starting...");
+    axum::serve(listener, service).await.unwrap();
 }
 
-async fn get_menu() -> Result<impl Reply, Infallible> {
-    // TODO: Query the DB for the menu items
-    // and return them
-    Ok("TODO".to_string())
+type ServiceResponse<T> = Result<(StatusCode, T), HttpError>;
+
+struct HttpError {
+    status_code: StatusCode,
+    body: String,
 }
 
-// TODO:
-// Client: add one or more items with a table number,
-// The application MUST, upon creation request, store the item, the table number, and how long the item will take to cook.
-async fn add_items_to_table(table_id: u64) -> Result<impl Reply, Infallible> {
-    Ok(StatusCode::NOT_IMPLEMENTED)
+impl IntoResponse for HttpError {
+    fn into_response(self) -> axum::response::Response {
+        Response::builder()
+            .status(self.status_code)
+            .body(Body::new(self.body))
+            .unwrap()
+    }
 }
 
-// TODO:
-// Client: remove an item for a table,
-// The application MUST, upon deletion request, remove a specified item for a specified table number.
-async fn remove_item_from_table() -> Result<impl Reply, Infallible> {
-    Ok(StatusCode::NOT_IMPLEMENTED)
+/// Queries the database and returns the contents of the menu table.
+async fn get_menu(State(state): State<ServiceState>) -> ServiceResponse<Json<Menu>> {
+    const QUERY: &str = "SELECT * FROM menu;";
+    let conn = state.conn.lock().await;
+
+    let items = conn
+        .prepare(QUERY)
+        .unwrap()
+        .query_map([], |row| {
+            Ok(MenuItem {
+                id: row.get(0).unwrap(),
+                name: row.get(1).unwrap(),
+                prep_min_secs: row.get(2).unwrap(),
+                prep_max_secs: row.get(3).unwrap(),
+            })
+        })
+        .unwrap()
+        .flatten()
+        .collect();
+
+    Ok((StatusCode::OK, Json(Menu { items })))
 }
 
 // TODO:
 // Client: query the items still remaining for a table.
 // The application MUST, upon query request, show all items for a specified table number.
-async fn query_table() -> Result<impl Reply, Infallible> {
-    Ok("TODO".to_string())
+async fn get_table(
+    State(state): State<ServiceState>,
+    Path(table_id): Path<u64>,
+) -> ServiceResponse<Json<TableResponse>> {
+    Err(HttpError {
+        body: "TODO".to_string(),
+        status_code: StatusCode::NOT_IMPLEMENTED,
+    })
+}
+
+// TODO:
+// Client: add one or more items with a table number,
+// The application MUST, upon creation request, store the item, the table number, and how long the item will take to cook.
+async fn post_table(State(state): State<ServiceState>, Path(table_id): Path<u64>) -> StatusCode {
+    StatusCode::NOT_IMPLEMENTED
+}
+
+// TODO:
+// Client: remove an item for a table,
+// The application MUST, upon deletion request, remove a specified item for a specified table number.
+async fn delete_table_item(
+    State(state): State<ServiceState>,
+    Path((table_id, order_id)): Path<(u64, u64)>,
+) -> StatusCode {
+    StatusCode::NOT_IMPLEMENTED
 }
 
 // TODO:
 // Client: query a specific item remaining for a table
 // The application MUST, upon query request, show a specified item for a specified table number.
-async fn query_table_item() -> Result<impl Reply, Infallible> {
-    Ok("TODO".to_string())
+async fn get_table_item(
+    State(state): State<ServiceState>,
+    Path((table_id, order_id)): Path<(u64, u64)>,
+) -> ServiceResponse<Json<TableOrder>> {
+    Err(HttpError {
+        body: "TODO".to_string(),
+        status_code: StatusCode::NOT_IMPLEMENTED,
+    })
 }

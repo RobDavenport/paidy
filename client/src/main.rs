@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use eframe::egui;
 use shared::{Menu, SERVICE_URL};
 
@@ -58,30 +56,61 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             // TODO: Split this into panels
-            ui.heading("Menu");
-            self.menu.iter().for_each(|item| {
-                ui.horizontal(|ui| {
-                    if ui.button("+").clicked() {
-                        self.pending_order.push(item.id);
-                    }
-                    ui.label(format!("id: {}:", item.id));
-                    ui.label(&item.name);
-                    ui.label(&item.prep_time);
+
+            ui.horizontal(|ui| {
+                // Menu Left Panel
+                ui.group(|ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Menu");
+                        self.menu.iter().for_each(|item| {
+                            ui.horizontal(|ui| {
+                                if ui.button("+").clicked() {
+                                    self.pending_order.push(item.id);
+                                }
+                                ui.label(format!("id: {}:", item.id));
+                                ui.label(&item.name);
+                                ui.label(&item.prep_time);
+                            });
+                        });
+                    });
                 });
-            });
 
-            if ui.button("Clear Order").clicked() {
-                self.pending_order.clear();
-                self.pending_table = None
-            }
+                // Order Center Panel
+                ui.group(|ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Order Status");
 
-            ui.separator();
-            ui.heading("Pending Order");
-            self.pending_order.iter().enumerate().for_each(|(i, id)| {
-                ui.label(format!(
-                    "{i}: {}",
-                    self.menu.iter().find(|item| item.id == *id).unwrap().name
-                ));
+                        ui.horizontal(|ui| {
+                            if ui.button("Clear Order").clicked() {
+                                self.pending_order.clear();
+                                self.pending_table = None
+                            };
+
+                            if ui.button("Submit Order").clicked() {
+                                println!("TODO: Submit order");
+                            }
+                        });
+
+                        ui.heading("Pending Order");
+                        self.pending_order.iter().enumerate().for_each(|(i, id)| {
+                            ui.label(format!(
+                                "{i}: {}",
+                                self.menu.iter().find(|item| item.id == *id).unwrap().name
+                            ));
+                        });
+                    });
+                });
+
+                // Table Status Panel
+                ui.group(|ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Table Status");
+                        ui.label("TODO: ");
+                        // TODO: Add Table Selector
+                        // TODO: Show Table contents
+                        // TODO: Add buttons to remove items from the table
+                    })
+                })
             });
         });
     }

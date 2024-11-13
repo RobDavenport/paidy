@@ -8,7 +8,7 @@ use axum::routing::get;
 use axum::Json;
 use axum::Router;
 use rusqlite::Connection;
-use shared::{Menu, OrderItemsRequest, TableOrder, TableResponse};
+use shared::{Menu, OrderItemsRequest, TableOrder, TableResponse, SERVICE_URL};
 use tokio::sync::Mutex;
 
 mod db;
@@ -34,8 +34,8 @@ async fn main() {
         )
         .with_state(state);
 
-    println!("Binding to 0.0.0.0:3030");
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030").await.unwrap();
+    println!("{SERVICE_URL}");
+    let listener = tokio::net::TcpListener::bind(SERVICE_URL).await.unwrap();
 
     println!("Service starting...");
     axum::serve(listener, service).await.unwrap();

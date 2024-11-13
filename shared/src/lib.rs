@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const SERVICE_URL: &str = "127.0.0.1:3030";
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Menu {
     pub items: Vec<MenuItem>,
@@ -9,8 +11,8 @@ pub struct Menu {
 pub struct MenuItem {
     pub id: i64,
     pub name: String,
-    pub prep_min_secs: f32,
-    pub prep_max_secs: f32,
+    pub prep_min_m: f32,
+    pub prep_max_m: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

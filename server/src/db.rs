@@ -107,8 +107,8 @@ pub async fn get_menu(connection: &Arc<Mutex<Connection>>) -> Result<Vec<MenuIte
             Ok(MenuItem {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                prep_min_secs: row.get(2)?,
-                prep_max_secs: row.get(3)?,
+                prep_min_m: row.get(2)?,
+                prep_max_m: row.get(3)?,
             })
         })
         .map_err(handle_query_error)?
@@ -176,11 +176,14 @@ async fn menu_lookup(
     connection: &Arc<Mutex<Connection>>,
     item_ids: &[i64],
 ) -> Result<HashMap<i64, MenuItemRow>, HttpError> {
-    let ids = item_ids
-        .iter()
-        .map(|id| id.to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
+    // Users may order multiple of the same item,
+    // so we need to dedup the list.
+    let mut ids = item_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+
+    let ids = ids.join(", ");
+
     let query = format!("SELECT id, prep_min_m, prep_max_m FROM menu WHERE id IN ({ids})");
 
     Ok(connection

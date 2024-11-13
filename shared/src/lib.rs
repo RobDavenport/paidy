@@ -7,7 +7,7 @@ pub struct Menu {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MenuItem {
-    pub id: u64,
+    pub id: i64,
     pub name: String,
     pub prep_min_secs: f32,
     pub prep_max_secs: f32,
@@ -15,19 +15,18 @@ pub struct MenuItem {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemsRequest {
-    pub items: Vec<u64>,
-    pub table_id: u64,
+    pub items: Vec<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableResponse {
-    pub table_id: u64,
+    pub table_id: i64,
     pub ordered_items: Vec<TableOrder>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableOrder {
-    pub table_id: u64,
-    pub item_id: u64,
+    pub table_id: i64,
+    pub item_id: i64,
     pub finished_at: String,
 }

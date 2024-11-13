@@ -8,7 +8,7 @@ use axum::routing::get;
 use axum::Json;
 use axum::Router;
 use rusqlite::Connection;
-use shared::{Menu, MenuItem, OrderItemsRequest, TableOrder, TableResponse};
+use shared::{Menu, OrderItemsRequest, TableOrder, TableResponse};
 use tokio::sync::Mutex;
 
 mod db;
@@ -27,7 +27,7 @@ async fn main() {
 
     let service = Router::new()
         .route("/menu", get(get_menu))
-        .route("/table/:table_id", get(get_table))
+        .route("/table/:table_id", get(get_table).post(post_table))
         .route(
             "/table/:table_id/:order_id",
             get(get_table_item).delete(delete_table_item),
@@ -60,33 +60,52 @@ impl IntoResponse for HttpError {
 /// Queries the database and returns the contents of the menu table. Generally called
 /// at startup for each of the clients to populate their data.
 async fn get_menu(State(state): State<ServiceState>) -> ServiceResponse<Json<Menu>> {
-    const QUERY: &str = "SELECT * FROM menu;";
-    let conn = state.conn.lock().await;
-
-    let items = conn
-        .prepare(QUERY)
-        .unwrap()
-        .query_map([], |row| {
-            Ok(MenuItem {
-                id: row.get(0).unwrap(),
-                name: row.get(1).unwrap(),
-                prep_min_secs: row.get(2).unwrap(),
-                prep_max_secs: row.get(3).unwrap(),
-            })
-        })
-        .unwrap()
-        .flatten()
-        .collect();
+    let items = db::get_menu(&state.conn).await?;
 
     Ok((StatusCode::OK, Json(Menu { items })))
 }
 
-// TODO:
 // Client: query the items still remaining for a table.
 // The application MUST, upon query request, show all items for a specified table number.
 async fn get_table(
     State(state): State<ServiceState>,
-    Path(table_id): Path<u64>,
+    Path(table_id): Path<i64>,
+) -> ServiceResponse<Json<TableResponse>> {
+    let ordered_items = db::get_tables_items(&state.conn, table_id).await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(TableResponse {
+            table_id,
+            ordered_items,
+        }),
+    ))
+}
+
+// Client: add one or more items with a table number,
+// The application MUST, upon creation request, store the item, the table number, and how long the item will take to cook.
+async fn post_table(
+    State(state): State<ServiceState>,
+    Path(table_id): Path<i64>,
+    Json(payload): Json<OrderItemsRequest>,
+) -> ServiceResponse<Json<TableResponse>> {
+    let ordered_items = db::order_items(&state.conn, table_id, payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(TableResponse {
+            table_id,
+            ordered_items,
+        }),
+    ))
+}
+
+// TODO:
+// Client: remove an item for a table,
+// The application MUST, upon deletion request, remove a specified item for a specified table number.
+async fn delete_table_item(
+    State(state): State<ServiceState>,
+    Path((table_id, order_id)): Path<(i64, i64)>,
 ) -> ServiceResponse<Json<TableResponse>> {
     Err(HttpError {
         body: "TODO".to_string(),
@@ -95,32 +114,11 @@ async fn get_table(
 }
 
 // TODO:
-// Client: add one or more items with a table number,
-// The application MUST, upon creation request, store the item, the table number, and how long the item will take to cook.
-async fn post_table(
-    State(state): State<ServiceState>,
-    Path(table_id): Path<u64>,
-    Json(payload): Json<OrderItemsRequest>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
-}
-
-// TODO:
-// Client: remove an item for a table,
-// The application MUST, upon deletion request, remove a specified item for a specified table number.
-async fn delete_table_item(
-    State(state): State<ServiceState>,
-    Path((table_id, order_id)): Path<(u64, u64)>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
-}
-
-// TODO:
 // Client: query a specific item remaining for a table
 // The application MUST, upon query request, show a specified item for a specified table number.
 async fn get_table_item(
     State(state): State<ServiceState>,
-    Path((table_id, order_id)): Path<(u64, u64)>,
+    Path((table_id, order_id)): Path<(i64, i64)>,
 ) -> ServiceResponse<Json<TableOrder>> {
     Err(HttpError {
         body: "TODO".to_string(),

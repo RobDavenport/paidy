@@ -107,8 +107,18 @@ impl eframe::App for App {
                         ui.heading("Table Status");
                         ui.label("TODO: ");
                         // TODO: Add Table Selector
+                        // On change, fetch the tables contents
+
                         // TODO: Show Table contents
                         // TODO: Add buttons to remove items from the table
+                    })
+                });
+
+                // "Debug" Menu
+                ui.group(|ui| {
+                    ui.vertical(|ui| {
+                        ui.heading("Debug Menu");
+                        ui.label("TODO");
                     })
                 })
             });

@@ -95,6 +95,7 @@ fn handle_query_error(error: rusqlite::Error) -> HttpError {
     }
 }
 
+/// Fetches the Menu table and returns all items
 pub async fn get_menu(connection: &Arc<Mutex<Connection>>) -> Result<Vec<MenuItem>, HttpError> {
     const QUERY: &str = "SELECT * FROM menu;";
 
@@ -116,11 +117,12 @@ pub async fn get_menu(connection: &Arc<Mutex<Connection>>) -> Result<Vec<MenuIte
         .collect())
 }
 
+/// Fetches all orders which match the passed in table id
 pub async fn get_tables_items(
     connection: &Arc<Mutex<Connection>>,
     table_id: i64,
 ) -> Result<Vec<TableOrder>, HttpError> {
-    const QUERY: &str = "SELECT * FROM orders WHERE table_id == ?1;";
+    const QUERY: &str = "SELECT (item_id, ready_at) FROM orders WHERE table_id == ?1;";
 
     Ok(connection
         .lock()
@@ -129,9 +131,8 @@ pub async fn get_tables_items(
         .map_err(handle_query_error)?
         .query_map([table_id], |row| {
             Ok(TableOrder {
-                table_id,
-                item_id: row.get(2)?,
-                finished_at: row.get(3)?,
+                item_id: row.get(0)?,
+                ready_at: row.get(1)?,
             })
         })
         .map_err(handle_query_error)?
@@ -139,6 +140,8 @@ pub async fn get_tables_items(
         .collect())
 }
 
+/// Adds the passed in list of items onto the table's order, and returns
+/// the updated list of ordered items
 pub async fn order_items(
     connection: &Arc<Mutex<Connection>>,
     table_id: i64,
@@ -147,17 +150,75 @@ pub async fn order_items(
     let menu_items = menu_lookup(connection, &items.items).await?;
 
     // Item ID, PrepTime
-    let rows: Vec<(i64, String)> = items
+    let rows = items
         .items
         .iter()
-        .flat_map(|id| Some((*id, menu_items.get(id)?.get_random_prep_time())))
-        .collect();
+        .flat_map(|id| {
+            Some(format!(
+                "({table_id}, {id}, {})",
+                menu_items.get(id)?.get_random_prep_time()
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
 
-    todo!()
+    let query = format!("INSERT INTO orders (table_id, item_id, ready_at) VALUES {rows};");
+
+    let _ = connection
+        .lock()
+        .await
+        .execute(&query, [])
+        .map_err(handle_query_error)?;
+
+    get_tables_items(connection, table_id).await
+}
+
+/// Deletes the order, as long as the item and table id are correct
+pub async fn delete_table_item(
+    connection: &Arc<Mutex<Connection>>,
+    table_id: i64,
+    order_id: i64,
+) -> Result<Vec<TableOrder>, HttpError> {
+    const QUERY: &str = "DELETE FROM orders WHERE order_id == 1 AND table_id == ?2;";
+
+    match connection
+        .lock()
+        .await
+        .execute(QUERY, [order_id, table_id])
+        .map_err(handle_query_error)?
+    {
+        // Tried to delete a non-existing row
+        0 => Err(HttpError {
+            status_code: StatusCode::NOT_FOUND,
+            body: "order id does not exist".to_string(),
+        }),
+
+        // Row deleted successfully, return the remaining rows
+        _ => get_tables_items(connection, table_id).await,
+    }
+}
+
+/// Fetches a single order for the given order and table id.
+pub async fn get_table_item(
+    connetion: &Arc<Mutex<Connection>>,
+    table_id: i64,
+    order_id: i64,
+) -> Result<TableOrder, HttpError> {
+    const QUERY: &str = "SELECT (item_id, ready_at) FROM orders WHERE id == ?1 AND table_id == ?2;";
+
+    connetion
+        .lock()
+        .await
+        .query_row(QUERY, [order_id, table_id], |row| {
+            Ok(TableOrder {
+                item_id: row.get(0)?,
+                ready_at: row.get(1)?,
+            })
+        })
+        .map_err(handle_query_error)
 }
 
 struct MenuItemRow {
-    name: String,
     prep_min_m: f64,
     prep_max_m: f64,
 }
@@ -168,7 +229,7 @@ impl MenuItemRow {
         let mins = self.prep_min_m + fastrand::f64() * range;
         let secs = mins.round() as i64;
 
-        return (chrono::Utc::now() + Duration::seconds(secs)).to_rfc3339();
+        (chrono::Utc::now() + Duration::seconds(secs)).to_rfc3339()
     }
 }
 
@@ -195,9 +256,8 @@ async fn menu_lookup(
             Ok((
                 row.get(0)?,
                 MenuItemRow {
-                    name: row.get(1)?,
-                    prep_min_m: row.get(2)?,
-                    prep_max_m: row.get(3)?,
+                    prep_min_m: row.get(1)?,
+                    prep_max_m: row.get(2)?,
                 },
             ))
         })

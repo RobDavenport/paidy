@@ -100,28 +100,30 @@ async fn post_table(
     ))
 }
 
-// TODO:
 // Client: remove an item for a table,
 // The application MUST, upon deletion request, remove a specified item for a specified table number.
 async fn delete_table_item(
     State(state): State<ServiceState>,
     Path((table_id, order_id)): Path<(i64, i64)>,
 ) -> ServiceResponse<Json<TableResponse>> {
-    Err(HttpError {
-        body: "TODO".to_string(),
-        status_code: StatusCode::NOT_IMPLEMENTED,
-    })
+    let ordered_items = db::delete_table_item(&state.conn, table_id, order_id).await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(TableResponse {
+            table_id,
+            ordered_items,
+        }),
+    ))
 }
 
-// TODO:
 // Client: query a specific item remaining for a table
 // The application MUST, upon query request, show a specified item for a specified table number.
 async fn get_table_item(
     State(state): State<ServiceState>,
     Path((table_id, order_id)): Path<(i64, i64)>,
 ) -> ServiceResponse<Json<TableOrder>> {
-    Err(HttpError {
-        body: "TODO".to_string(),
-        status_code: StatusCode::NOT_IMPLEMENTED,
-    })
+    let item = db::get_table_item(&state.conn, table_id, order_id).await?;
+
+    Ok((StatusCode::OK, Json(item)))
 }

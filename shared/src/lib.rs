@@ -28,7 +28,6 @@ pub struct TableResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableOrder {
-    pub table_id: i64,
     pub item_id: i64,
-    pub finished_at: String,
+    pub ready_at: String,
 }

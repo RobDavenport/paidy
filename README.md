@@ -1,5 +1,11 @@
 # Restaurant Service & Client
 
+## Instructions
+
+1. Run the server with `cargo run --bin server` 
+2. After server has been initialized, run the client with `cargo run --bin client`
+3. Client UI can now be used to send various kinds of requests to the server.
+
 ## Shortcuts:
 
 1. Very minimal logging setup.

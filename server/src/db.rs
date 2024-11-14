@@ -182,9 +182,9 @@ pub async fn delete_table_item(
     table_id: i64,
     order_id: i64,
 ) -> Result<Vec<TableOrder>, HttpError> {
-    const QUERY: &str = "DELETE FROM orders WHERE id == 1 AND table_id == ?2;";
+    const QUERY: &str = "DELETE FROM orders WHERE id == ?1 AND table_id == ?2;";
 
-    // Fun story: This causes a deadlock
+    // Fun story: This caused a deadlock
     // match connection
     //     .lock()
     //     .await
@@ -252,7 +252,9 @@ impl MenuItemRow {
         let mins = self.prep_min_m + fastrand::f64() * range;
         let secs = mins.round() as i64;
 
-        (chrono::Utc::now() + Duration::seconds(secs)).to_rfc3339()
+        (chrono::Utc::now() + Duration::seconds(secs))
+            .format("%d/%m/%Y %H:%M")
+            .to_string()
     }
 }
 

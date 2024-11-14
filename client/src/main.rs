@@ -211,7 +211,7 @@ fn order_items(table_id: i64, items: &[i64]) -> Option<TableResponse> {
     match client
         .post(format!("http://{SERVICE_URL}/tables/{table_id}"))
         .json(&OrderItemsRequest {
-            items: items.iter().cloned().collect(),
+            items: items.to_vec(),
         })
         .send()
         .unwrap()

@@ -28,6 +28,7 @@ pub struct TableResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableOrder {
+    pub order_id: i64,
     pub item_id: i64,
     pub ready_at: String,
 }

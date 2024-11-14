@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use crate::HttpError;
 
 const INIT_DB_QUERY: &str = r#"
+    BEGIN;
     CREATE TABLE menu (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
@@ -21,8 +22,9 @@ const INIT_DB_QUERY: &str = r#"
         table_id INTEGER NOT NULL,
         item_id INTEGER NOT NULL,
         ready_at TEXT NOT NULL,
-        FOREIGN_KEY (item_id) REFERENCES menu (id),
+        FOREIGN KEY (item_id) REFERENCES menu (id)
     );
+    COMMIT;
 "#;
 
 const ITEMS_MCDONALDS: &str = r#"
@@ -52,7 +54,7 @@ pub fn init_db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
     println!("Initialized connection to DB");
 
-    conn.execute(INIT_DB_QUERY, ()).unwrap();
+    conn.execute_batch(INIT_DB_QUERY).unwrap();
     println!("Setup tables successfully.");
 
     conn.execute(ITEMS_MCDONALDS, ()).unwrap();
@@ -89,10 +91,10 @@ fn handle_query_error(error: rusqlite::Error) -> HttpError {
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
 
-    HttpError {
-        status_code,
-        body: error.to_string(),
-    }
+    let body = error.to_string();
+    println!("Query Error: {body}");
+
+    HttpError { status_code, body }
 }
 
 /// Fetches the Menu table and returns all items
@@ -122,7 +124,7 @@ pub async fn get_tables_items(
     connection: &Arc<Mutex<Connection>>,
     table_id: i64,
 ) -> Result<Vec<TableOrder>, HttpError> {
-    const QUERY: &str = "SELECT (item_id, ready_at) FROM orders WHERE table_id == ?1;";
+    const QUERY: &str = "SELECT id, item_id, ready_at FROM orders WHERE table_id == ?1;";
 
     Ok(connection
         .lock()
@@ -131,8 +133,9 @@ pub async fn get_tables_items(
         .map_err(handle_query_error)?
         .query_map([table_id], |row| {
             Ok(TableOrder {
-                item_id: row.get(0)?,
-                ready_at: row.get(1)?,
+                order_id: row.get(0)?,
+                item_id: row.get(1)?,
+                ready_at: row.get(2)?,
             })
         })
         .map_err(handle_query_error)?
@@ -153,10 +156,10 @@ pub async fn order_items(
     let rows = items
         .items
         .iter()
-        .flat_map(|id| {
+        .flat_map(|item_id| {
             Some(format!(
-                "({table_id}, {id}, {})",
-                menu_items.get(id)?.get_random_prep_time()
+                "({table_id}, {item_id}, '{}')",
+                menu_items.get(item_id)?.get_random_prep_time()
             ))
         })
         .collect::<Vec<_>>()
@@ -179,14 +182,32 @@ pub async fn delete_table_item(
     table_id: i64,
     order_id: i64,
 ) -> Result<Vec<TableOrder>, HttpError> {
-    const QUERY: &str = "DELETE FROM orders WHERE order_id == 1 AND table_id == ?2;";
+    const QUERY: &str = "DELETE FROM orders WHERE id == 1 AND table_id == ?2;";
 
-    match connection
+    // Fun story: This causes a deadlock
+    // match connection
+    //     .lock()
+    //     .await
+    //     .execute(QUERY, [order_id, table_id])
+    //     .map_err(handle_query_error)?
+    // {
+    //     // Tried to delete a non-existing row
+    //     0 => Err(HttpError {
+    //         status_code: StatusCode::NOT_FOUND,
+    //         body: "order id does not exist".to_string(),
+    //     }),
+
+    //     // Row deleted successfully, return the remaining rows
+    //     _ => get_tables_items(connection, table_id).await,
+    // }
+
+    let updated_rows = connection
         .lock()
         .await
         .execute(QUERY, [order_id, table_id])
-        .map_err(handle_query_error)?
-    {
+        .map_err(handle_query_error)?;
+
+    match updated_rows {
         // Tried to delete a non-existing row
         0 => Err(HttpError {
             status_code: StatusCode::NOT_FOUND,
@@ -204,15 +225,17 @@ pub async fn get_table_item(
     table_id: i64,
     order_id: i64,
 ) -> Result<TableOrder, HttpError> {
-    const QUERY: &str = "SELECT (item_id, ready_at) FROM orders WHERE id == ?1 AND table_id == ?2;";
+    const QUERY: &str =
+        "SELECT id, item_id, ready_at FROM orders WHERE id == ?1 AND table_id == ?2;";
 
     connetion
         .lock()
         .await
         .query_row(QUERY, [order_id, table_id], |row| {
             Ok(TableOrder {
-                item_id: row.get(0)?,
-                ready_at: row.get(1)?,
+                order_id: row.get(0)?,
+                item_id: row.get(1)?,
+                ready_at: row.get(2)?,
             })
         })
         .map_err(handle_query_error)

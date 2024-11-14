@@ -705,6 +705,7 @@ name = "client"
 version = "0.0.0"
 dependencies = [
  "eframe",
+ "fastrand",
  "reqwest",
  "shared",
 ]

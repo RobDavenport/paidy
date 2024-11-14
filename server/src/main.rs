@@ -27,9 +27,9 @@ async fn main() {
 
     let service = Router::new()
         .route("/menu", get(get_menu))
-        .route("/table/:table_id", get(get_table).post(post_table))
+        .route("/tables/:table_id", get(get_table).post(post_table))
         .route(
-            "/table/:table_id/:order_id",
+            "/tables/:table_id/:order_id",
             get(get_table_item).delete(delete_table_item),
         )
         .with_state(state);
@@ -60,6 +60,7 @@ impl IntoResponse for HttpError {
 /// Queries the database and returns the contents of the menu table. Generally called
 /// at startup for each of the clients to populate their data.
 async fn get_menu(State(state): State<ServiceState>) -> ServiceResponse<Json<Menu>> {
+    println!("get_menu");
     let items = db::get_menu(&state.conn).await?;
 
     Ok((StatusCode::OK, Json(Menu { items })))
@@ -71,6 +72,7 @@ async fn get_table(
     State(state): State<ServiceState>,
     Path(table_id): Path<i64>,
 ) -> ServiceResponse<Json<TableResponse>> {
+    println!("get_table {table_id}");
     let ordered_items = db::get_tables_items(&state.conn, table_id).await?;
 
     Ok((
@@ -89,6 +91,7 @@ async fn post_table(
     Path(table_id): Path<i64>,
     Json(payload): Json<OrderItemsRequest>,
 ) -> ServiceResponse<Json<TableResponse>> {
+    println!("post_table {table_id}");
     let ordered_items = db::order_items(&state.conn, table_id, payload).await?;
 
     Ok((
@@ -106,6 +109,7 @@ async fn delete_table_item(
     State(state): State<ServiceState>,
     Path((table_id, order_id)): Path<(i64, i64)>,
 ) -> ServiceResponse<Json<TableResponse>> {
+    println!("delete_table_item {table_id}, {order_id}");
     let ordered_items = db::delete_table_item(&state.conn, table_id, order_id).await?;
 
     Ok((
@@ -123,6 +127,7 @@ async fn get_table_item(
     State(state): State<ServiceState>,
     Path((table_id, order_id)): Path<(i64, i64)>,
 ) -> ServiceResponse<Json<TableOrder>> {
+    println!("get_table_item {table_id}, {order_id}");
     let item = db::get_table_item(&state.conn, table_id, order_id).await?;
 
     Ok((StatusCode::OK, Json(item)))

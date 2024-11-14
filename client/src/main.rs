@@ -1,5 +1,7 @@
+use std::thread::JoinHandle;
+
 use eframe::egui;
-use shared::{Menu, SERVICE_URL};
+use shared::{Menu, OrderItemsRequest, TableResponse, SERVICE_URL};
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -13,8 +15,10 @@ fn main() {
 
 struct App {
     menu: Vec<MenuListItem>,
-    pending_table: Option<i64>,
     pending_order: Vec<i64>,
+    table_selector: String,
+    table_response: TableResponse,
+    debug_order_id: String,
 }
 
 struct MenuListItem {
@@ -46,17 +50,22 @@ impl App {
 
         Self {
             menu,
-            pending_table: None,
             pending_order: Vec::new(),
+            table_selector: String::default(),
+            table_response: TableResponse {
+                table_id: 0,
+                ordered_items: Vec::new(),
+            },
+            debug_order_id: String::default(),
         }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // TODO: Split this into panels
+        let mut new_response = None;
 
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 // Menu Left Panel
                 ui.group(|ui| {
@@ -83,11 +92,15 @@ impl eframe::App for App {
                         ui.horizontal(|ui| {
                             if ui.button("Clear Order").clicked() {
                                 self.pending_order.clear();
-                                self.pending_table = None
                             };
 
                             if ui.button("Submit Order").clicked() {
-                                println!("TODO: Submit order");
+                                if let Ok(table_id) = self.table_selector.parse() {
+                                    new_response = order_items(table_id, &self.pending_order);
+                                    self.pending_order.clear();
+                                } else {
+                                    println!("Failed to parse i64 from table_selector");
+                                }
                             }
                         });
 
@@ -105,38 +118,154 @@ impl eframe::App for App {
                 ui.group(|ui| {
                     ui.vertical(|ui| {
                         ui.heading("Table Status");
-                        ui.label("TODO: ");
-                        // TODO: Add Table Selector
-                        // On change, fetch the tables contents
+                        ui.text_edit_singleline(&mut self.table_selector);
+                        if ui.button("Fetch Table Items").clicked() {
+                            if let Ok(table_id) = self.table_selector.parse() {
+                                new_response = fetch_table_items(table_id);
+                            } else {
+                                println!("Failed to parse i64 from table_selector");
+                            }
+                        }
 
-                        // TODO: Show Table contents
-                        // TODO: Add buttons to remove items from the table
-                    })
+                        self.table_response.ordered_items.iter().for_each(|item| {
+                            ui.horizontal(|ui| {
+                                if ui.button("-").clicked() {
+                                    if let Ok(table_id) = self.table_selector.parse() {
+                                        new_response = remove_item(table_id, item.order_id);
+                                    } else {
+                                        println!("Failed to parse i64 from table_selector");
+                                    }
+                                }
+                                ui.label(format!(
+                                    "oid: {}, {}, rdy @ {}",
+                                    item.order_id,
+                                    self.menu.get(item.item_id as usize).unwrap().name, // This is not ideal...
+                                    item.ready_at,
+                                ));
+                            });
+                        });
+                    });
                 });
 
                 // "Debug" Menu
                 ui.group(|ui| {
                     ui.vertical(|ui| {
                         ui.heading("Debug Menu");
-                        ui.label("TODO");
+                        if ui.button("Random 10 Table Orders").clicked() {
+                            order_random_multiple(10);
+                        }
+
+                        if ui.button("Random 100 Table Orders").clicked() {
+                            order_random_multiple(100);
+                        }
+
+                        if ui.button("Random 1000 Table Orders").clicked() {
+                            order_random_multiple(1000);
+                        }
+
+                        ui.label("oid:");
+                        ui.text_edit_singleline(&mut self.debug_order_id);
+
+                        if ui.button("Get Table Item").clicked() {
+                            if let (Ok(table_id), Ok(order_id)) =
+                                (self.table_selector.parse(), self.debug_order_id.parse())
+                            {
+                                println!("{:?}", get_table_item(table_id, order_id));
+                            } else {
+                                println!(
+                                    "Failed to parse i64 from table_selector or debug_order_id."
+                                );
+                            }
+                        }
                     })
                 })
             });
         });
+
+        if let Some(new_response) = new_response {
+            self.table_response = new_response
+        }
     }
 }
-// TODO:
-// Client: add one or more items with a table number,
-// The application MUST, upon creation request, store the item, the table number, and how long the item will take to cook.
 
-// TODO:
-// Client: remove an item for a table,
-// The application MUST, upon deletion request, remove a specified item for a specified table number.
+fn order_random_multiple(count: usize) {
+    println!("Ordering random items to {count} tables...");
+    let threads: Vec<JoinHandle<()>> = (0..count)
+        .map(|table_id| {
+            std::thread::spawn(move || {
+                let item_count = fastrand::usize(5..15);
+                let items: Vec<i64> = (0..item_count).map(|_| fastrand::i64(0..15)).collect(); // Hard coded to 15 items
+                let _ = order_items(table_id as i64, &items);
+            })
+        })
+        .collect();
 
-// TODO:
-// Client: query the items still remaining for a table.
-// The application MUST, upon query request, show all items for a specified table number.
+    for thread in threads {
+        thread.join().unwrap()
+    }
+    println!("Done!")
+}
 
-// TODO:
-// Client: query a specific item remaining for a table
-// The application MUST, upon query request, show a specified item for a specified table number.
+fn order_items(table_id: i64, items: &[i64]) -> Option<TableResponse> {
+    let client = reqwest::blocking::Client::new();
+    match client
+        .post(format!("http://{SERVICE_URL}/tables/{table_id}"))
+        .json(&OrderItemsRequest {
+            items: items.iter().cloned().collect(),
+        })
+        .send()
+        .unwrap()
+        .json()
+    {
+        Ok(response) => Some(response),
+        Err(e) => {
+            println!("{e}");
+            None
+        }
+    }
+}
+
+fn fetch_table_items(table_id: i64) -> Option<TableResponse> {
+    match reqwest::blocking::get(format!("http://{SERVICE_URL}/tables/{table_id}"))
+        .unwrap()
+        .json()
+    {
+        Ok(response) => Some(response),
+        Err(e) => {
+            println!("{e}");
+            None
+        }
+    }
+}
+
+fn remove_item(table_id: i64, order_id: i64) -> Option<TableResponse> {
+    let client = reqwest::blocking::Client::new();
+    match client
+        .delete(format!("http://{SERVICE_URL}/tables/{table_id}/{order_id}"))
+        .send()
+        .unwrap()
+        .json()
+    {
+        Ok(response) => Some(response),
+        Err(e) => {
+            println!("{e}");
+            None
+        }
+    }
+}
+
+fn get_table_item(table_id: i64, order_id: i64) -> Option<String> {
+    let client = reqwest::blocking::Client::new();
+    match client
+        .get(format!("http://{SERVICE_URL}/tables/{table_id}/{order_id}"))
+        .send()
+        .unwrap()
+        .text()
+    {
+        Ok(response) => Some(response),
+        Err(e) => {
+            println!("{e}");
+            None
+        }
+    }
+}
